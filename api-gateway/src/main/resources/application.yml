@@ -1,0 +1,93 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+  cloud:
+    gateway:
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 10
+            redis-rate-limiter.burstCapacity: 20
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@accountKeyResolver}"
+      routes:
+        # User Service - public routes (no auth)
+        - id: user-service-public
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/users/login, /api/users/register, /api/users/refresh
+          filters:
+            - StripPrefix=0
+
+        # User Service - protected routes
+        - id: user-service-protected
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=0
+            - JwtAuthFilter
+
+        # Account Service
+        - id: account-service
+          uri: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/accounts/**
+          filters:
+            - StripPrefix=0
+            - JwtAuthFilter
+
+        # Transfer Service
+        - id: transfer-service
+          uri: ${TRANSFER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/transfers/**
+          filters:
+            - StripPrefix=0
+            - JwtAuthFilter
+
+        # Ledger Service
+        - id: ledger-service
+          uri: ${LEDGER_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/ledger/**
+          filters:
+            - StripPrefix=0
+            - JwtAuthFilter
+
+        # Notification Service (SSE - no body read)
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=0
+            - JwtAuthFilter
+
+jwt:
+  secret: ${JWT_SECRET:moneyflow-super-secret-jwt-key-2024-at-least-256-bits-long}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.moneyflow: DEBUG

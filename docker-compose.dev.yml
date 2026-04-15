@@ -1,0 +1,103 @@
+# 로컬 개발 오버라이드
+# 사용법: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --watch
+#
+# docker compose watch 가 하는 일:
+#   - sync  : 소스 변경 → 컨테이너 안으로 실시간 복사 (재빌드 없음)
+#   - rebuild: package.json / pom.xml 변경 → 해당 서비스만 자동 재빌드
+
+services:
+
+  # ── Frontend ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      target: build          # nginx 단계 건너뜀 (Vite dev server 사용)
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./frontend/index.html
+          target: /app/index.html
+        - action: rebuild          # package.json 바뀌면 npm install 포함 재빌드
+          path: ./frontend/package.json
+
+  # ── api-gateway ──────────────────────────────────────────────────────────
+  api-gateway:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./api-gateway/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./api-gateway/pom.xml
+
+  # ── user-service ─────────────────────────────────────────────────────────
+  user-service:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./user-service/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./user-service/pom.xml
+
+  # ── account-service ──────────────────────────────────────────────────────
+  account-service:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./account-service/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./account-service/pom.xml
+
+  # ── transfer-service ─────────────────────────────────────────────────────
+  transfer-service:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./transfer-service/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./transfer-service/pom.xml
+
+  # ── ledger-service ───────────────────────────────────────────────────────
+  ledger-service:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./ledger-service/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./ledger-service/pom.xml
+
+  # ── notification-service ─────────────────────────────────────────────────
+  notification-service:
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./notification-service/src
+          target: /app/src
+          ignore:
+            - "**/*.class"
+        - action: rebuild
+          path: ./notification-service/pom.xml

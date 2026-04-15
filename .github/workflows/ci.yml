@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 변경된 서비스만 감지
+  # ─────────────────────────────────────────────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api-gateway:          ${{ steps.filter.outputs.api-gateway }}
+      user-service:         ${{ steps.filter.outputs.user-service }}
+      account-service:      ${{ steps.filter.outputs.account-service }}
+      transfer-service:     ${{ steps.filter.outputs.transfer-service }}
+      ledger-service:       ${{ steps.filter.outputs.ledger-service }}
+      notification-service: ${{ steps.filter.outputs.notification-service }}
+      frontend:             ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'api-gateway/**'
+            user-service:
+              - 'user-service/**'
+            account-service:
+              - 'account-service/**'
+            transfer-service:
+              - 'transfer-service/**'
+            ledger-service:
+              - 'ledger-service/**'
+            notification-service:
+              - 'notification-service/**'
+            frontend:
+              - 'frontend/**'
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Spring Boot 서비스 빌드 & 테스트 (병렬)
+  # ─────────────────────────────────────────────────────────────────────────
+  build-backend:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - account-service
+          - transfer-service
+          - ledger-service
+          - notification-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if not changed
+        id: skip
+        run: |
+          changed="${{ needs.detect-changes.outputs[matrix.service] }}"
+          # CI를 처음 실행하거나 pom.xml 없으면 항상 빌드
+          if [ "$changed" = "false" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up JDK 17
+        if: steps.skip.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build & Test — ${{ matrix.service }}
+        if: steps.skip.outputs.skip != 'true'
+        working-directory: ./${{ matrix.service }}
+        run: mvn verify -B --no-transfer-progress
+
+      - name: Upload test results
+        if: always() && steps.skip.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.service }}
+          path: ./${{ matrix.service }}/target/surefire-reports/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend 빌드 & 린트
+  # ─────────────────────────────────────────────────────────────────────────
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: ./frontend
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 3
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Docker 이미지 빌드 검증 (레지스트리 push 없이)
+  # ─────────────────────────────────────────────────────────────────────────
+  docker-build-check:
+    needs: [build-backend, build-frontend]
+    if: always() && !failure()
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - account-service
+          - transfer-service
+          - ledger-service
+          - notification-service
+          - frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push) — ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          tags: moneyflow/${{ matrix.service }}:ci-check
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # CI 최종 상태 집계 (PR 체크 게이트)
+  # ─────────────────────────────────────────────────────────────────────────
+  ci-status:
+    needs: [build-backend, build-frontend, docker-build-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.build-backend.result }}" == "failure" ]] || \
+             [[ "${{ needs.docker-build-check.result }}" == "failure" ]]; then
+            echo "CI FAILED"
+            exit 1
+          fi
+          echo "CI PASSED"

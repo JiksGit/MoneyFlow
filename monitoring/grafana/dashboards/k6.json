@@ -1,0 +1,92 @@
+{
+  "title": "K6 부하 테스트 결과",
+  "uid": "k6-results",
+  "schemaVersion": 38,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "VUs (가상 사용자 수)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_vus\") |> filter(fn: (r) => r._field == \"value\")",
+          "legendFormat": "VUs"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP 요청 응답 시간 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_http_req_duration\") |> filter(fn: (r) => r._field == \"p(95)\") |> aggregateWindow(every: 10s, fn: mean)",
+          "legendFormat": "P95"
+        },
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_http_req_duration\") |> filter(fn: (r) => r._field == \"p(99)\") |> aggregateWindow(every: 10s, fn: mean)",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 3,
+      "title": "HTTP 요청 성공/실패율",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_http_reqs\") |> aggregateWindow(every: 10s, fn: sum)",
+          "legendFormat": "총 요청"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "초당 요청 수 (RPS)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_http_reqs\") |> last()",
+          "legendFormat": "RPS"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "오류율 (%)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "datasource": "InfluxDB",
+          "query": "from(bucket: \"k6\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"k6_http_req_failed\") |> last()",
+          "legendFormat": "Error Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
