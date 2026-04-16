@@ -2,6 +2,7 @@ package com.moneyflow.account.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -30,8 +31,9 @@ public class Account {
     @Column(nullable = false)
     private Long version = 0L;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false, nullable = false)
+    private LocalDateTime createdAt;
 
     public void debit(BigDecimal amount) {
         if (balance.compareTo(amount) < 0) {
