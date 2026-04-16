@@ -2,6 +2,7 @@ package com.moneyflow.ledger.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -38,6 +39,7 @@ public class Transaction {
     @Column(name = "failure_reason", length = 500)
     private String failureReason;
 
-    @Column(name = "recorded_at", updatable = false)
-    private LocalDateTime recordedAt = LocalDateTime.now();
+    @CreationTimestamp
+    @Column(name = "recorded_at", updatable = false, nullable = false)
+    private LocalDateTime recordedAt;
 }
